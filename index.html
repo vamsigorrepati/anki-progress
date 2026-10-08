@@ -220,23 +220,6 @@ function barChart(days, field, fmt, title, note) {
   return `<div class="chart"><h3>${esc(title)}</h3><div class="sub">${esc(note)}</div><svg id="${id}" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(title)} per day, last ${days.length} days">${g}</svg></div>`;
 }
 
-/* ---------- phone / other apps ---------- */
-function appsSplit(m) {
-  // Instagram, TikTok and Messages always named; everything else is "other apps"
-  return ["Instagram", "TikTok", "Messages", "Other apps"]
-    .filter((k) => (m[k] || 0) >= 0.5)
-    .map((k) => `${k === "Other apps" ? "other apps" : k} ${dur(m[k])}`).join(" · ");
-}
-function appsLine(t) {
-  if (!t.apps_breaks) return "";
-  const sum = (m) => Object.values(m).reduce((a, b) => a + b, 0);
-  const b = sum(t.apps_breaks), s = sum(t.apps_studying);
-  let out = ` Phone/other apps: ${dur(b)} during breaks`;
-  if (b >= 0.5) out += ` (${appsSplit(t.apps_breaks)})`;
-  if (s >= 0.5) out += `, ${dur(s)} while studying (${appsSplit(t.apps_studying)})`;
-  return out + ".";
-}
-
 /* ---------- page ---------- */
 function render(d) {
   const t = d.today;
@@ -252,7 +235,6 @@ function render(d) {
     ${tile(t.retention != null ? t.retention + "%" : "–", "reviews remembered")}
     ${tile(t.pomodoros, "Pomodoros")}
     ${tile(dur(t.claude_min), "asking Claude")}
-    ${t.apps_breaks ? tile(dur(t.apps_min), "phone / other apps") : ""}
   </div>`;
 
   // goal
@@ -280,7 +262,7 @@ function render(d) {
     let ticks = `<span style="left:0;transform:none">${clock(t0)}</span><span style="left:100%;transform:translateX(-100%)">${clock(t1)}</span>`;
     h += `<h2>Today</h2><div class="tl" id="tl">${segs}</div><div class="tlx">${ticks}</div>
       <div class="legend"><span><i style="background:var(--s-study)"></i>studying</span><span><i style="background:var(--s-claude)"></i>asking Claude</span><span><i style="background:var(--s-slow)"></i>slow card (2–5 min)</span><span><i style="background:var(--s-break);outline:1px solid var(--line)"></i>break (5+ min)</span></div>
-      <div class="sub" style="margin-top:8px">${t.breaks} break${t.breaks === 1 ? "" : "s"}, ${dur(t.break_min)} total.${appsLine(t)}</div>`;
+      <div class="sub" style="margin-top:8px">${t.breaks} break${t.breaks === 1 ? "" : "s"}, ${dur(t.break_min)} total.</div>`;
     setTimeout(() => {
       const sorted = d.timeline.slice().sort((a, b) => order[a.k] - order[b.k]);
       document.querySelectorAll("#tl span").forEach((el) => {
@@ -306,8 +288,8 @@ function render(d) {
     ${barChart(days, "reviews", n, "Reviews", "Review cards done")}
     ${barChart(days, "new_per_hr", n, "New cards per hour", "Including every repeat of those cards")}
   </div>`;
-  h += `<details><summary>Table view</summary><table style="margin-top:8px"><tr><th>Day</th><th class="n">Study</th><th class="n">New</th><th class="n">Reviews</th><th class="n">Remembered</th><th class="n">New/hr</th><th class="n">Pomodoros</th><th class="n">Phone/apps</th></tr>` +
-    days.slice().reverse().filter((x) => x.cards).map((x) => `<tr><td>${shortDate(x.date)}</td><td class="n">${dur(x.study_min)}</td><td class="n">${x.new}</td><td class="n">${x.reviews}</td><td class="n">${x.retention != null ? x.retention + "%" : "–"}</td><td class="n">${x.new_per_hr ?? "–"}</td><td class="n">${x.pomodoros || ""}</td><td class="n">${x.apps_min ? dur(x.apps_min) : ""}</td></tr>`).join("") +
+  h += `<details><summary>Table view</summary><table style="margin-top:8px"><tr><th>Day</th><th class="n">Study</th><th class="n">New</th><th class="n">Reviews</th><th class="n">Remembered</th><th class="n">New/hr</th><th class="n">Pomodoros</th></tr>` +
+    days.slice().reverse().filter((x) => x.cards).map((x) => `<tr><td>${shortDate(x.date)}</td><td class="n">${dur(x.study_min)}</td><td class="n">${x.new}</td><td class="n">${x.reviews}</td><td class="n">${x.retention != null ? x.retention + "%" : "–"}</td><td class="n">${x.new_per_hr ?? "–"}</td><td class="n">${x.pomodoros || ""}</td></tr>`).join("") +
     `</table></details>`;
 
   $("#app").innerHTML = h;
