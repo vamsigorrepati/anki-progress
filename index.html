@@ -234,12 +234,16 @@ function appsLine(t) {
   let out = ` Phone/other apps: ${dur(b)} during breaks`;
   if (b >= 0.5) out += ` (${appsSplit(t.apps_breaks)})`;
   if (s >= 0.5) out += `, ${dur(s)} while studying (${appsSplit(t.apps_studying)})`;
-  return out + ".";
+  out += ".";
+  if (window.__iphoneUntil && window.__iphoneUntil < t.__end) out += ` iPhone data so far reaches ${clock(window.__iphoneUntil)}.`;
+  return out;
 }
 
 /* ---------- page ---------- */
 function render(d) {
   const t = d.today;
+  window.__iphoneUntil = d.iphone_until;
+  t.__end = d.generated;
   const tile = (v, l) => `<div><div class="big">${v}</div><div class="lbl">${l}</div></div>`;
   let h = `<h1>Anki Progress</h1><div class="sub">Updated ${ago(d.generated)} · ${new Date(d.generated).toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" })}</div>`;
 
