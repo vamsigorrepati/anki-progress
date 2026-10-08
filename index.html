@@ -289,7 +289,8 @@ function render(d) {
       const sorted = d.timeline.slice().sort((a, b) => order[a.k] - order[b.k]);
       document.querySelectorAll("#tl span").forEach((el) => {
         const s = sorted[+el.dataset.s];
-        el.addEventListener("mousemove", (e) => showTip(e, `<b>${names[s.k]}</b><br>${clock(s.a)} – ${clock(s.z)} (${dur((s.z - s.a) / 60000)})`));
+        const apps = s.apps ? Object.entries(s.apps).map(([dev, m]) => `<br>${dev}: ${appsSplit(m)}`).join("") : "";
+        el.addEventListener("mousemove", (e) => showTip(e, `<b>${names[s.k]}</b><br>${clock(s.a)} – ${clock(s.z)} (${dur((s.z - s.a) / 60000)})${apps}`));
         el.addEventListener("mouseleave", hideTip);
       });
     });
