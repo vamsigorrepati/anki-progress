@@ -238,7 +238,7 @@ function render(d) {
     ${tile(t.cards, "cards")}
     ${tile(t.new, "new cards")}
     ${tile(t.reviews, "reviews")}
-    ${tile(d.rate.new ?? t.new_per_hr ?? "–", "new cards / hour")}
+    ${tile(t.new_per_hr ?? d.rate.new ?? "–", "new cards / hour today" + (d.rate.new && t.new_per_hr ? `<br><span class="muted">last 30 min: ${d.rate.new}/hr</span>` : ""))}
     ${tile(t.retention != null ? t.retention + "%" : "–", "reviews remembered")}
     ${tile(t.pomodoros, "Pomodoros")}
     ${tile(dur(t.claude_min), "asking Claude")}
