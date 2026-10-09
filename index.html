@@ -18,7 +18,7 @@
   --s-study: #2a78d6;
   --s-claude: #eb6834;
   --s-slow: #1baf7a;
-  --s-break: #e2e1dc;
+  --s-break: #c9c8c2;
   --accent: #2a78d6;
   --bad: #c43d3c;
 }
@@ -35,7 +35,7 @@
     --s-study: #3987e5;
     --s-claude: #d95926;
     --s-slow: #199e70;
-    --s-break: #3a3935;
+    --s-break: #4d4c47;
     --accent: #3987e5;
     --bad: #e66767;
   }
@@ -44,7 +44,7 @@
   color-scheme: dark;
   --bg: #1a1a19; --card: #222220; --ink: #ffffff; --ink-2: #c3c2b7; --ink-3: #8d8c84;
   --line: #34332f; --track: #2b2a27; --s-study: #3987e5; --s-claude: #d95926;
-  --s-slow: #199e70; --s-break: #3a3935; --accent: #3987e5; --bad: #e66767;
+  --s-slow: #199e70; --s-break: #4d4c47; --accent: #3987e5; --bad: #e66767;
 }
 * { box-sizing: border-box; }
 body {
@@ -59,7 +59,12 @@ h2 { font-size: 16px; margin: 36px 0 10px; }
 .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(150px, 45%), 1fr)); gap: 18px 16px; margin-top: 18px; }
 .big { font-size: 26px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .lbl { color: var(--ink-2); font-size: 12px; }
-.tl { position: relative; height: 28px; background: var(--s-break); border-radius: 4px; overflow: hidden; }
+.tl { position: relative; height: 30px; background: var(--card); box-shadow: inset 0 0 0 1px var(--line); border-radius: 4px; overflow: hidden; }
+.tl i { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--line); }
+.pr { margin: 14px 0 6px; } .pr.empty { opacity: .55; }
+.ph { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 12px; font-size: 13px; margin-bottom: 4px; }
+.pn { font-weight: 600; min-width: 84px; } .ps { color: var(--ink-2); } .ps b { color: var(--ink); font-weight: 600; }
+.ps i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 4px; }
 .tl span { position: absolute; top: 0; bottom: 0; }
 .tlx { position: relative; height: 18px; color: var(--ink-3); font-size: 11px; }
 .tlx span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
@@ -255,18 +260,49 @@ function render(d) {
 
   // timeline
   if (d.timeline.length) {
-    const t0 = Math.min(...d.timeline.map((s) => s.a)), t1 = Math.max(...d.timeline.map((s) => s.z)), span = Math.max(t1 - t0, 1);
+    // Three rows, each a 6-hour window at the same scale (an hour is the same width in
+    // every row). Blank = nothing logged; only real breaks are drawn as breaks.
+    const t0 = Math.min(...d.timeline.map((s) => s.a)), t1 = Math.max(...d.timeline.map((s) => s.z));
+    const H = 3600000, d0 = new Date(t0); d0.setHours(0, 0, 0, 0);
+    if (new Date(t0).getHours() < 4) d0.setDate(d0.getDate() - 1);
+    const day0 = d0.getTime();
+    const periods = [["Morning", Math.min(day0 + 6 * H, t0), day0 + 12 * H], ["Afternoon", day0 + 12 * H, day0 + 18 * H], ["Evening", day0 + 18 * H, Math.max(day0 + 24 * H, t1)]];
     const order = { study: 0, slow: 1, claude: 2, break: 3 };
     const names = { study: "Studying", claude: "Asking Claude", slow: "Slow card", break: "Break" };
-    const segs = d.timeline.slice().sort((a, b) => order[a.k] - order[b.k]).map((s, i) =>
-      `<span data-s="${i}" style="left:${(100 * (s.a - t0)) / span}%;width:${Math.max((100 * (s.z - s.a)) / span, 0.4)}%;background:var(--s-${s.k})"></span>`).join("");
-    let ticks = `<span style="left:0;transform:none">${clock(t0)}</span><span style="left:100%;transform:translateX(-100%)">${clock(t1)}</span>`;
-    h += `<h2>Today</h2><div class="tl" id="tl">${segs}</div><div class="tlx">${ticks}</div>
+    const sorted = d.timeline.slice().sort((a, b) => order[a.k] - order[b.k]);
+    let rowsHtml = "";
+    periods.forEach(([name, p0, p1]) => {
+      const span = p1 - p0, tot = { study: 0, slow: 0, claude: 0, break: 0 };
+      let segs = "", views = 0;
+      sorted.forEach((s, i) => {
+        const a = Math.max(s.a, p0), z = Math.min(s.z, p1);
+        if (z <= a) return;
+        tot[s.k] += (z - a) / 60000;
+        if (s.k === "study" && s.a >= p0 && s.a < p1) views += s.v || 0;
+        segs += `<span data-s="${i}" style="left:${(100 * (a - p0)) / span}%;width:${Math.max((100 * (z - a)) / span, 0.4)}%;background:var(--s-${s.k})"></span>`;
+      });
+      let ticks = "", lines = "";
+      for (let h = Math.ceil(p0 / H) * H; h <= p1; h += H) {
+        const pos = (100 * (h - p0)) / span;
+        const lab = new Date(h).toLocaleTimeString([], { hour: "numeric" }).toLowerCase().replace(" ", "");
+        const tr = pos < 1 ? "transform:none" : pos > 99 ? "transform:translateX(-100%)" : "";
+        ticks += `<span style="left:${pos}%;${tr}">${lab}</span>`;
+        if (pos > 0 && pos < 100) lines += `<i style="left:${pos}%"></i>`;
+      }
+      const any = Object.values(tot).some((v) => v > 0);
+      const bits = [`<b>${dur(tot.study - tot.claude - tot.slow)}</b> studying`];
+      if (tot.claude >= 0.5) bits.push(`<i style="background:var(--s-claude)"></i>${dur(tot.claude)} Claude`);
+      if (tot.slow >= 0.5) bits.push(`<i style="background:var(--s-slow)"></i>${dur(tot.slow)} slow cards`);
+      if (tot.break >= 0.5) bits.push(`<i style="background:var(--s-break)"></i>${dur(tot.break)} breaks`);
+      if (views) bits.push(`${views} views`);
+      rowsHtml += `<div class="pr${any ? "" : " empty"}"><div class="ph"><span class="pn">${name}</span><span class="ps">${any ? bits.join(" · ") : "nothing logged"}</span></div>
+        <div class="tl">${lines}${segs}</div><div class="tlx">${ticks}</div></div>`;
+    });
+    h += `<h2>Today</h2>${rowsHtml}
       <div class="legend"><span><i style="background:var(--s-study)"></i>studying</span><span><i style="background:var(--s-claude)"></i>asking Claude</span><span><i style="background:var(--s-slow)"></i>slow card (2–5 min)</span><span><i style="background:var(--s-break);outline:1px solid var(--line)"></i>break (5+ min)</span></div>
       <div class="sub" style="margin-top:8px">${t.breaks} break${t.breaks === 1 ? "" : "s"}, ${dur(t.break_min)} total.</div>`;
     setTimeout(() => {
-      const sorted = d.timeline.slice().sort((a, b) => order[a.k] - order[b.k]);
-      document.querySelectorAll("#tl span").forEach((el) => {
+      document.querySelectorAll(".tl span[data-s]").forEach((el) => {
         const s = sorted[+el.dataset.s];
         el.addEventListener("mousemove", (e) => showTip(e, `<b>${names[s.k]}</b><br>${clock(s.a)} – ${clock(s.z)} (${dur((s.z - s.a) / 60000)})`));
         el.addEventListener("mouseleave", hideTip);
