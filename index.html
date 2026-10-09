@@ -64,6 +64,7 @@ h2 { font-size: 16px; margin: 36px 0 10px; }
 .pr { margin: 14px 0 6px; } .pr.empty { opacity: .55; }
 .ph { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 12px; font-size: 13px; margin-bottom: 4px; }
 .pn { font-weight: 600; min-width: 84px; } .ps { color: var(--ink-2); } .ps b { color: var(--ink); font-weight: 600; }
+.tl span[data-k="off"], .offsw { background: repeating-linear-gradient(135deg, var(--line) 0 4px, var(--card) 4px 8px) !important; box-shadow: inset 0 0 0 1px var(--line); }
 .ps i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 4px; }
 .tl span { position: absolute; top: 0; bottom: 0; }
 .tlx { position: relative; height: 18px; color: var(--ink-3); font-size: 11px; }
@@ -267,19 +268,19 @@ function render(d) {
     if (new Date(t0).getHours() < 4) d0.setDate(d0.getDate() - 1);
     const day0 = d0.getTime();
     const periods = [["Morning", Math.min(day0 + 6 * H, t0), day0 + 12 * H], ["Afternoon", day0 + 12 * H, day0 + 18 * H], ["Evening", day0 + 18 * H, Math.max(day0 + 24 * H, t1)]];
-    const order = { study: 0, slow: 1, claude: 2, break: 3 };
-    const names = { study: "Studying", claude: "Asking Claude", slow: "Slow card", break: "Break" };
+    const order = { study: 0, slow: 1, claude: 2, break: 3, off: 4 };
+    const names = { study: "Studying", claude: "Asking Claude", slow: "Slow card", break: "Break", off: "Off" };
     const sorted = d.timeline.slice().sort((a, b) => order[a.k] - order[b.k]);
     let rowsHtml = "";
     periods.forEach(([name, p0, p1]) => {
-      const span = p1 - p0, tot = { study: 0, slow: 0, claude: 0, break: 0 };
+      const span = p1 - p0, tot = { study: 0, slow: 0, claude: 0, break: 0, off: 0 };
       let segs = "", views = 0;
       sorted.forEach((s, i) => {
         const a = Math.max(s.a, p0), z = Math.min(s.z, p1);
         if (z <= a) return;
         tot[s.k] += (z - a) / 60000;
         if (s.k === "study" && s.a >= p0 && s.a < p1) views += s.v || 0;
-        segs += `<span data-s="${i}" style="left:${(100 * (a - p0)) / span}%;width:${Math.max((100 * (z - a)) / span, 0.4)}%;background:var(--s-${s.k})"></span>`;
+        segs += `<span data-s="${i}" data-k="${s.k}" style="left:${(100 * (a - p0)) / span}%;width:${Math.max((100 * (z - a)) / span, 0.4)}%;background:var(--s-${s.k})"></span>`;
       });
       let ticks = "", lines = "";
       for (let h = Math.ceil(p0 / H) * H; h <= p1; h += H) {
@@ -294,17 +295,18 @@ function render(d) {
       if (tot.claude >= 0.5) bits.push(`<i style="background:var(--s-claude)"></i>${dur(tot.claude)} Claude`);
       if (tot.slow >= 0.5) bits.push(`<i style="background:var(--s-slow)"></i>${dur(tot.slow)} slow cards`);
       if (tot.break >= 0.5) bits.push(`<i style="background:var(--s-break)"></i>${dur(tot.break)} breaks`);
+      if (tot.off >= 0.5) bits.push(`<i class="offsw"></i>${dur(tot.off)} off`);
       if (views) bits.push(`${views} views`);
       rowsHtml += `<div class="pr${any ? "" : " empty"}"><div class="ph"><span class="pn">${name}</span><span class="ps">${any ? bits.join(" · ") : "nothing logged"}</span></div>
         <div class="tl">${lines}${segs}</div><div class="tlx">${ticks}</div></div>`;
     });
     h += `<h2>Today</h2>${rowsHtml}
-      <div class="legend"><span><i style="background:var(--s-study)"></i>studying</span><span><i style="background:var(--s-claude)"></i>asking Claude</span><span><i style="background:var(--s-slow)"></i>slow card (2–5 min)</span><span><i style="background:var(--s-break);outline:1px solid var(--line)"></i>break (5+ min)</span></div>
+      <div class="legend"><span><i style="background:var(--s-study)"></i>studying</span><span><i style="background:var(--s-claude)"></i>asking Claude</span><span><i style="background:var(--s-slow)"></i>slow card (2–5 min)</span><span><i style="background:var(--s-break);outline:1px solid var(--line)"></i>break (5+ min)</span><span><i class="offsw"></i>off (class, done)</span></div>
       <div class="sub" style="margin-top:8px">${t.breaks} break${t.breaks === 1 ? "" : "s"}, ${dur(t.break_min)} total.</div>`;
     setTimeout(() => {
       document.querySelectorAll(".tl span[data-s]").forEach((el) => {
         const s = sorted[+el.dataset.s];
-        el.addEventListener("mousemove", (e) => showTip(e, `<b>${names[s.k]}</b><br>${clock(s.a)} – ${clock(s.z)} (${dur((s.z - s.a) / 60000)})`));
+        el.addEventListener("mousemove", (e) => showTip(e, `<b>${s.k === "off" && s.why === "class" ? "In class" : names[s.k]}</b><br>${clock(s.a)} – ${clock(s.z)} (${dur((s.z - s.a) / 60000)})`));
         el.addEventListener("mouseleave", hideTip);
       });
     });
