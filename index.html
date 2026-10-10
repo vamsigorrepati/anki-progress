@@ -306,7 +306,7 @@ function render(d) {
   let h = `<div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px"><h1>Anki Progress</h1><button id="rf" style="font:inherit;font-size:13px;padding:5px 12px;border-radius:6px;border:1px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer">Refresh</button></div><div class="sub" id="upd">Data from ${clock(d.generated)} (${ago(d.generated)}) · ${new Date(d.generated).toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" })} · checked ${clock(Date.now())}</div>`;
 
   h += `<div class="tiles">
-    ${(() => { const v = split(t); return tile(dur(v.total), `studied today in total (all time minus breaks)<br><span class="muted">cards ${dur(v.cards)} · Claude ${dur(v.claude)} · practice ${dur(v.practice)}</span>`); })()}
+    ${(() => { const v = split(t); return tile(dur(v.total), `total today<br><span class="muted">cards ${dur(v.cards)} · Claude ${dur(v.claude)} · practice ${dur(v.practice)}</span>`); })()}
     ${tile(t.cards, "cards")}
     ${tile(t.new, "new cards")}
     ${tile(t.reviews, "reviews")}
