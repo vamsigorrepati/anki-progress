@@ -238,6 +238,61 @@ function barChart(days, field, fmt, title, note) {
   return `<div class="chart"><h3>${esc(title)}</h3><div class="sub">${esc(note)}</div><svg id="${id}" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(title)} per day, last ${days.length} days">${g}</svg></div>`;
 }
 
+/* total studying = cards (Anki review, Claude chats taken out) + asking Claude + practice questions */
+function split(x) {
+  // total = all active time minus breaks (sent by Anki); older days: cards + Claude + practice
+  const claude = x.claude_min || 0, practice = x.practice_min || 0;
+  if (x.total_min != null) {
+    const cards = x.cards_min != null ? x.cards_min : Math.max(0, x.total_min - claude - practice);
+    return { cards, claude, practice, total: x.total_min };
+  }
+  const cards = Math.max(0, (x.study_min || 0) - claude);
+  return { cards, claude, practice, total: cards + claude + practice };
+}
+
+/* study time per day as stacked bars: cards / Claude / practice */
+function stackChart(days, title, note) {
+  const W = 420, H = 150, L = 34, B = 20, T = 8;
+  const parts = [["cards", "var(--s-study)", "Cards"], ["claude", "var(--s-claude)", "Asking Claude"], ["practice", "var(--s-practice)", "Practice questions"]];
+  const sp = days.map(split);
+  const max = Math.max(1, ...sp.map((v) => v.total));
+  const nice = (() => { const p = Math.pow(10, Math.floor(Math.log10(max))); const n = max / p; return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * p; })();
+  const bw = (W - L) / days.length;
+  const y = (v) => T + (H - T - B) * (1 - v / nice);
+  const ax = (v) => (v >= 60 ? Math.round(v / 60) + "h" : Math.round(v) + "m");
+  let g = "";
+  for (const f of [0, 0.5, 1]) {
+    const v = nice * f, yy = y(v);
+    g += `<line class="grid" x1="${L}" x2="${W}" y1="${yy}" y2="${yy}"/><text x="${L - 6}" y="${yy + 3}" text-anchor="end">${ax(v)}</text>`;
+  }
+  days.forEach((d, i) => {
+    const x = L + i * bw + 1, w = Math.max(bw - 2, 1);
+    let base = 0, segs = "";
+    parts.forEach(([k, col]) => {
+      const v = sp[i][k];
+      if (v > 0) {
+        const y1 = y(base + v), y0 = y(base);
+        segs += `<rect x="${x}" y="${y1}" width="${w}" height="${Math.max(y0 - y1, 1)}" fill="${col}"/>`;
+        base += v;
+      }
+    });
+    g += `<g data-i="${i}"><rect class="hit" x="${L + i * bw}" y="${T}" width="${bw}" height="${H - T - B}"/>${segs}</g>`;
+    if (i % 7 === days.length % 7 || i === days.length - 1)
+      g += `<text x="${x + w / 2}" y="${H - 5}" text-anchor="middle">${i === days.length - 1 ? "today" : shortDate(d.date)}</text>`;
+  });
+  const id = "c" + Math.random().toString(36).slice(2);
+  setTimeout(() => {
+    document.querySelectorAll(`#${id} g[data-i]`).forEach((el) => {
+      const d = days[+el.dataset.i], v = sp[+el.dataset.i];
+      el.addEventListener("mousemove", (e) => showTip(e, `<b>${d.date === days[days.length - 1].date ? "Today" : shortDate(d.date)}</b> · ${dur(v.total)} total<br>` +
+        parts.map(([k, col, name]) => `<i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${col};margin-right:5px"></i>${name}: ${dur(v[k])}`).join("<br>")));
+      el.addEventListener("mouseleave", hideTip);
+    });
+  });
+  const legend = parts.map(([, col, name]) => `<span><i style="background:${col}"></i>${name}</span>`).join("");
+  return `<div class="chart"><h3>${esc(title)}</h3><div class="sub">${esc(note)}</div><svg id="${id}" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(title)} per day">${g}</svg><div class="legend">${legend}</div></div>`;
+}
+
 /* ---------- page ---------- */
 function render(d) {
   const t = d.today;
@@ -251,7 +306,7 @@ function render(d) {
   let h = `<div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px"><h1>Anki Progress</h1><button id="rf" style="font:inherit;font-size:13px;padding:5px 12px;border-radius:6px;border:1px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer">Refresh</button></div><div class="sub" id="upd">Data from ${clock(d.generated)} (${ago(d.generated)}) · ${new Date(d.generated).toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" })} · checked ${clock(Date.now())}</div>`;
 
   h += `<div class="tiles">
-    ${tile(dur(t.study_min), "studied today")}
+    ${(() => { const v = split(t); return tile(dur(v.total), `studied today in total (all time minus breaks)<br><span class="muted">cards ${dur(v.cards)} · Claude ${dur(v.claude)} · practice ${dur(v.practice)}</span>`); })()}
     ${tile(t.cards, "cards")}
     ${tile(t.new, "new cards")}
     ${tile(t.reviews, "reviews")}
@@ -315,7 +370,7 @@ function render(d) {
       sorted.filter((s) => s.k === "practice").forEach((q) => sorted.filter((s) => s.k === "study").forEach((st) => {
         pqIn += Math.max(0, Math.min(q.z, st.z, p1) - Math.max(q.a, st.a, p0)) / 60000;
       }));
-      const bits = [`<b>${dur(Math.max(0, tot.study - tot.claude - tot.slow - pqIn))}</b> studying`];
+      const bits = [`<b>${dur(Math.max(0, tot.study - tot.claude - tot.slow - pqIn))}</b> cards`];
       if (tot.claude >= 0.5) bits.push(`<i style="background:var(--s-claude)"></i>${dur(tot.claude)} Claude`);
       if (tot.practice >= 0.5) bits.push(`<i style="background:var(--s-practice)"></i>${dur(tot.practice)} practice Qs`);
       if (tot.slow >= 0.5) bits.push(`<i style="background:var(--s-slow)"></i>${dur(tot.slow)} slow cards`);
@@ -347,14 +402,14 @@ function render(d) {
   const days = d.history;
   const n = (v) => (v == null ? "–" : Math.round(v));
   h += sec("history", `Last ${days.length} days`, `<div class="charts">
-    ${barChart(days, "study_min", (v, ax) => (ax ? (v >= 60 ? Math.round(v / 60) + "h" : Math.round(v) + "m") : dur(v)), "Study time", "Breaks over 5 min left out")}
+    ${stackChart(days, "Study time", "Cards + asking Claude + practice questions; breaks over 5 min left out")}
     ${barChart(days, "new", n, "New cards", "Cards seen for the first time")}
     ${barChart(days, "reviews", n, "Reviews", "Review cards done")}
     ${barChart(days, "new_per_hr", n, "New cards per hour", "Including every repeat of those cards")}
     ${barChart(days, "practice_min", (v, ax) => (ax ? (v >= 60 ? Math.round(v / 60) + "h" : Math.round(v) + "m") : dur(v)), "Practice questions", "Time on Claude practice questions")}
   </div>` +
-    `<details><summary>Table view</summary><table style="margin-top:8px"><tr><th>Day</th><th class="n">Study</th><th class="n">New</th><th class="n">Reviews</th><th class="n">Remembered</th><th class="n">New/hr</th><th class="n">Practice</th><th class="n">Pomodoros</th></tr>` +
-    days.slice().reverse().filter((x) => x.cards || x.practice_n).map((x) => `<tr><td>${shortDate(x.date)}</td><td class="n">${dur(x.study_min)}</td><td class="n">${x.new}</td><td class="n">${x.reviews}</td><td class="n">${x.retention != null ? x.retention + "%" : "–"}</td><td class="n">${x.new_per_hr ?? "–"}</td><td class="n">${x.practice_n ? `${dur(x.practice_min)} · ${x.practice_n} Qs` : ""}</td><td class="n">${x.pomodoros || ""}</td></tr>`).join("") +
+    `<details><summary>Table view</summary><table style="margin-top:8px"><tr><th>Day</th><th class="n">Total</th><th class="n">Cards</th><th class="n">New</th><th class="n">Reviews</th><th class="n">Remembered</th><th class="n">New/hr</th><th class="n">Practice</th><th class="n">Pomodoros</th></tr>` +
+    days.slice().reverse().filter((x) => x.cards || x.practice_n).map((x) => `<tr><td>${shortDate(x.date)}</td><td class="n">${dur(split(x).total)}</td><td class="n">${dur(split(x).cards)}</td><td class="n">${x.new}</td><td class="n">${x.reviews}</td><td class="n">${x.retention != null ? x.retention + "%" : "–"}</td><td class="n">${x.new_per_hr ?? "–"}</td><td class="n">${x.practice_n ? `${dur(x.practice_min)} · ${x.practice_n} Qs` : ""}</td><td class="n">${x.pomodoros || ""}</td></tr>`).join("") +
     `</table></details>`);
 
   $("#app").innerHTML = h;
