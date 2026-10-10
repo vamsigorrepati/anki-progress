@@ -95,6 +95,15 @@ td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; white-space:
   box-shadow: 0 4px 14px rgba(0,0,0,.12); display: none; z-index: 10; white-space: nowrap;
 }
 details { margin-top: 10px; }
+/* collapsible sections: click a heading to fold it; remembered on this device */
+details.sec { margin-top: 0; }
+details.sec > summary { list-style: none; display: flex; align-items: center; gap: 8px; color: var(--ink); font-size: inherit; user-select: none; }
+details.sec > summary::-webkit-details-marker { display: none; }
+details.sec > summary h2 { margin: 36px 0 10px; }
+details.sec > summary::before { content: "▾"; color: var(--ink-2); font-size: 18px; margin-top: 26px; width: 16px; text-align: center; transition: transform .15s; }
+details.sec:not([open]) > summary::before { transform: rotate(-90deg); }
+details.sec:not([open]) > summary h2 { margin-bottom: 0; }
+details.sec > summary:hover h2 { color: var(--accent); }
 summary { cursor: pointer; color: var(--ink-2); font-size: 13px; }
 /* lock screen */
 #lock { min-height: 80vh; display: flex; align-items: center; justify-content: center; }
@@ -230,6 +239,12 @@ function barChart(days, field, fmt, title, note) {
 /* ---------- page ---------- */
 function render(d) {
   const t = d.today;
+  // a section you can fold; open/closed is remembered per device (and survives the 2-min refresh)
+  const sec = (key, title, body) => {
+    let shut = false;
+    try { shut = localStorage.getItem("ap_sec_" + key) === "0"; } catch (e) {}
+    return `<details class="sec" data-sec="${key}"${shut ? "" : " open"}><summary><h2>${title}</h2></summary>${body}</details>`;
+  };
   const tile = (v, l) => `<div><div class="big">${v}</div><div class="lbl">${l}</div></div>`;
   let h = `<div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px"><h1>Anki Progress</h1><button id="rf" style="font:inherit;font-size:13px;padding:5px 12px;border-radius:6px;border:1px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer">Refresh</button></div><div class="sub" id="upd">Data from ${clock(d.generated)} (${ago(d.generated)}) · ${new Date(d.generated).toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" })} · checked ${clock(Date.now())}</div>`;
 
@@ -247,16 +262,17 @@ function render(d) {
   // goal
   if (d.goal) {
     const g = d.goal, L = g.left, total = L.new + L.learning + L.review;
-    h += `<h2>Goal</h2>`;
-    if (!total) h += `<div class="goalline"><b>Done.</b> Every goal deck is finished.</div>`;
+    let gb = "";
+    if (!total) gb += `<div class="goalline"><b>Done.</b> Every goal deck is finished.</div>`;
     else {
       const parts = [L.new && `${L.new} new`, L.learning && `${L.learning} learning`, L.review && `${L.review} reviews`].filter(Boolean).join(" · ");
       const fin = g.eta_min ? ` · about <b>${dur(g.eta_min)}</b> of studying at the current pace` : "";
-      h += `<div class="goalline"><b>${parts}</b> left${fin}${g.finish_by ? ` · aiming to finish by ${esc(g.finish_by)}` : ""}</div>`;
-      h += `<div class="scroll"><table><tr><th>Deck</th><th class="n">New</th><th class="n">Learning</th><th class="n">Due</th></tr>` +
+      gb += `<div class="goalline"><b>${parts}</b> left${fin}${g.finish_by ? ` · aiming to finish by ${esc(g.finish_by)}` : ""}</div>`;
+      gb += `<div class="scroll"><table><tr><th>Deck</th><th class="n">New</th><th class="n">Learning</th><th class="n">Due</th></tr>` +
         g.decks.map((x) => `<tr><td>${esc(x.name)}</td><td class="n">${x.new ?? 0}</td><td class="n">${x.learning ?? 0}</td><td class="n">${x.review ?? 0}</td></tr>`).join("") +
         `</table></div>`;
     }
+    h += sec("goal", "Goal", gb);
   }
 
   // timeline
@@ -300,9 +316,9 @@ function render(d) {
       rowsHtml += `<div class="pr${any ? "" : " empty"}"><div class="ph"><span class="pn">${name}</span><span class="ps">${any ? bits.join(" · ") : "nothing logged"}</span></div>
         <div class="tl">${lines}${segs}</div><div class="tlx">${ticks}</div></div>`;
     });
-    h += `<h2>Today</h2>${rowsHtml}
+    h += sec("today", "Today", `${rowsHtml}
       <div class="legend"><span><i style="background:var(--s-study)"></i>studying</span><span><i style="background:var(--s-claude)"></i>asking Claude</span><span><i style="background:var(--s-slow)"></i>slow card (2–5 min)</span><span><i style="background:var(--s-break);outline:1px solid var(--line)"></i>break (5+ min)</span><span><i class="offsw"></i>off (class, done)</span></div>
-      <div class="sub" style="margin-top:8px">${t.breaks} break${t.breaks === 1 ? "" : "s"}, ${dur(t.break_min)} total.</div>`;
+      <div class="sub" style="margin-top:8px">${t.breaks} break${t.breaks === 1 ? "" : "s"}, ${dur(t.break_min)} total.</div>`);
     setTimeout(() => {
       document.querySelectorAll(".tl span[data-s]").forEach((el) => {
         const s = sorted[+el.dataset.s];
@@ -313,25 +329,28 @@ function render(d) {
   }
 
   if (d.topics.length) {
-    h += `<details open><summary>Topics today</summary><table style="margin-top:8px"><tr><th>Lecture › topic</th><th class="n">Cards</th><th class="n">Views per card</th><th class="n">Claude questions</th></tr>` +
+    h += sec("topics", "Topics today", `<table><tr><th>Lecture › topic</th><th class="n">Cards</th><th class="n">Views per card</th><th class="n">Claude questions</th></tr>` +
       d.topics.map((x) => `<tr><td>${esc(x.name)}</td><td class="n">${x.cards}</td><td class="n">${(x.views / x.cards).toFixed(1)}</td><td class="n">${x.claude || ""}</td></tr>`).join("") +
-      `</table></details>`;
+      `</table>`);
   }
 
   // history
   const days = d.history;
   const n = (v) => (v == null ? "–" : Math.round(v));
-  h += `<h2>Last ${days.length} days</h2><div class="charts">
+  h += sec("history", `Last ${days.length} days`, `<div class="charts">
     ${barChart(days, "study_min", (v, ax) => (ax ? (v >= 60 ? Math.round(v / 60) + "h" : Math.round(v) + "m") : dur(v)), "Study time", "Breaks over 5 min left out")}
     ${barChart(days, "new", n, "New cards", "Cards seen for the first time")}
     ${barChart(days, "reviews", n, "Reviews", "Review cards done")}
     ${barChart(days, "new_per_hr", n, "New cards per hour", "Including every repeat of those cards")}
-  </div>`;
-  h += `<details><summary>Table view</summary><table style="margin-top:8px"><tr><th>Day</th><th class="n">Study</th><th class="n">New</th><th class="n">Reviews</th><th class="n">Remembered</th><th class="n">New/hr</th><th class="n">Pomodoros</th></tr>` +
+  </div>` +
+    `<details><summary>Table view</summary><table style="margin-top:8px"><tr><th>Day</th><th class="n">Study</th><th class="n">New</th><th class="n">Reviews</th><th class="n">Remembered</th><th class="n">New/hr</th><th class="n">Pomodoros</th></tr>` +
     days.slice().reverse().filter((x) => x.cards).map((x) => `<tr><td>${shortDate(x.date)}</td><td class="n">${dur(x.study_min)}</td><td class="n">${x.new}</td><td class="n">${x.reviews}</td><td class="n">${x.retention != null ? x.retention + "%" : "–"}</td><td class="n">${x.new_per_hr ?? "–"}</td><td class="n">${x.pomodoros || ""}</td></tr>`).join("") +
-    `</table></details>`;
+    `</table></details>`);
 
   $("#app").innerHTML = h;
+  document.querySelectorAll("details.sec").forEach((el) => el.addEventListener("toggle", () => {
+    try { localStorage.setItem("ap_sec_" + el.dataset.sec, el.open ? "1" : "0"); } catch (e) {}
+  }));
   $("#rf").onclick = () => refresh(true);
 }
 
