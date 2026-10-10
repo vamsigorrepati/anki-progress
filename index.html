@@ -18,6 +18,7 @@
   --s-study: #2a78d6;
   --s-claude: #eb6834;
   --s-slow: #1baf7a;
+  --s-practice: #7c5cdb;
   --s-break: #c9c8c2;
   --accent: #2a78d6;
   --bad: #c43d3c;
@@ -35,6 +36,7 @@
     --s-study: #3987e5;
     --s-claude: #d95926;
     --s-slow: #199e70;
+    --s-practice: #9b82ec;
     --s-break: #4d4c47;
     --accent: #3987e5;
     --bad: #e66767;
@@ -44,7 +46,7 @@
   color-scheme: dark;
   --bg: #1a1a19; --card: #222220; --ink: #ffffff; --ink-2: #c3c2b7; --ink-3: #8d8c84;
   --line: #34332f; --track: #2b2a27; --s-study: #3987e5; --s-claude: #d95926;
-  --s-slow: #199e70; --s-break: #4d4c47; --accent: #3987e5; --bad: #e66767;
+  --s-slow: #199e70; --s-practice: #9b82ec; --s-break: #4d4c47; --accent: #3987e5; --bad: #e66767;
 }
 * { box-sizing: border-box; }
 body {
@@ -257,6 +259,7 @@ function render(d) {
     ${tile(t.retention != null ? t.retention + "%" : "–", "reviews remembered")}
     ${tile(t.pomodoros, "Pomodoros")}
     ${tile(dur(t.claude_min), "asking Claude")}
+    ${tile(t.practice_n ? dur(t.practice_min) : "–", "practice questions" + (t.practice_n ? `<br><span class="muted">${t.practice_n} answered · ${Math.round(100 * t.practice_right / t.practice_n)}% right</span>` : ""))}
   </div>`;
 
   // goal
@@ -284,12 +287,12 @@ function render(d) {
     if (new Date(t0).getHours() < 4) d0.setDate(d0.getDate() - 1);
     const day0 = d0.getTime();
     const periods = [["Morning", Math.min(day0 + 6 * H, t0), day0 + 12 * H], ["Afternoon", day0 + 12 * H, day0 + 18 * H], ["Evening", day0 + 18 * H, Math.max(day0 + 24 * H, t1)]];
-    const order = { study: 0, slow: 1, claude: 2, break: 3, off: 4 };
-    const names = { study: "Studying", claude: "Asking Claude", slow: "Slow card", break: "Break", off: "Off" };
+    const order = { study: 0, slow: 1, claude: 2, practice: 3, break: 4, off: 5 };
+    const names = { study: "Studying", claude: "Asking Claude", slow: "Slow card", practice: "Practice questions", break: "Break", off: "Off" };
     const sorted = d.timeline.slice().sort((a, b) => order[a.k] - order[b.k]);
     let rowsHtml = "";
     periods.forEach(([name, p0, p1]) => {
-      const span = p1 - p0, tot = { study: 0, slow: 0, claude: 0, break: 0, off: 0 };
+      const span = p1 - p0, tot = { study: 0, slow: 0, claude: 0, practice: 0, break: 0, off: 0 };
       let segs = "", views = 0;
       sorted.forEach((s, i) => {
         const a = Math.max(s.a, p0), z = Math.min(s.z, p1);
@@ -307,8 +310,14 @@ function render(d) {
         if (pos > 0 && pos < 100) lines += `<i style="left:${pos}%"></i>`;
       }
       const any = Object.values(tot).some((v) => v > 0);
-      const bits = [`<b>${dur(tot.study - tot.claude - tot.slow)}</b> studying`];
+      // practice time inside a study block is not card time
+      let pqIn = 0;
+      sorted.filter((s) => s.k === "practice").forEach((q) => sorted.filter((s) => s.k === "study").forEach((st) => {
+        pqIn += Math.max(0, Math.min(q.z, st.z, p1) - Math.max(q.a, st.a, p0)) / 60000;
+      }));
+      const bits = [`<b>${dur(Math.max(0, tot.study - tot.claude - tot.slow - pqIn))}</b> studying`];
       if (tot.claude >= 0.5) bits.push(`<i style="background:var(--s-claude)"></i>${dur(tot.claude)} Claude`);
+      if (tot.practice >= 0.5) bits.push(`<i style="background:var(--s-practice)"></i>${dur(tot.practice)} practice Qs`);
       if (tot.slow >= 0.5) bits.push(`<i style="background:var(--s-slow)"></i>${dur(tot.slow)} slow cards`);
       if (tot.break >= 0.5) bits.push(`<i style="background:var(--s-break)"></i>${dur(tot.break)} breaks`);
       if (tot.off >= 0.5) bits.push(`<i class="offsw"></i>${dur(tot.off)} off`);
@@ -317,7 +326,7 @@ function render(d) {
         <div class="tl">${lines}${segs}</div><div class="tlx">${ticks}</div></div>`;
     });
     h += sec("today", "Today", `${rowsHtml}
-      <div class="legend"><span><i style="background:var(--s-study)"></i>studying</span><span><i style="background:var(--s-claude)"></i>asking Claude</span><span><i style="background:var(--s-slow)"></i>slow card (2–5 min)</span><span><i style="background:var(--s-break);outline:1px solid var(--line)"></i>break (5+ min)</span><span><i class="offsw"></i>off (class, done)</span></div>
+      <div class="legend"><span><i style="background:var(--s-study)"></i>studying</span><span><i style="background:var(--s-claude)"></i>asking Claude</span><span><i style="background:var(--s-practice)"></i>practice questions</span><span><i style="background:var(--s-slow)"></i>slow card (2–5 min)</span><span><i style="background:var(--s-break);outline:1px solid var(--line)"></i>break (5+ min)</span><span><i class="offsw"></i>off (class, done)</span></div>
       <div class="sub" style="margin-top:8px">${t.breaks} break${t.breaks === 1 ? "" : "s"}, ${dur(t.break_min)} total.</div>`);
     setTimeout(() => {
       document.querySelectorAll(".tl span[data-s]").forEach((el) => {
@@ -342,9 +351,10 @@ function render(d) {
     ${barChart(days, "new", n, "New cards", "Cards seen for the first time")}
     ${barChart(days, "reviews", n, "Reviews", "Review cards done")}
     ${barChart(days, "new_per_hr", n, "New cards per hour", "Including every repeat of those cards")}
+    ${barChart(days, "practice_min", (v, ax) => (ax ? (v >= 60 ? Math.round(v / 60) + "h" : Math.round(v) + "m") : dur(v)), "Practice questions", "Time on Claude practice questions")}
   </div>` +
-    `<details><summary>Table view</summary><table style="margin-top:8px"><tr><th>Day</th><th class="n">Study</th><th class="n">New</th><th class="n">Reviews</th><th class="n">Remembered</th><th class="n">New/hr</th><th class="n">Pomodoros</th></tr>` +
-    days.slice().reverse().filter((x) => x.cards).map((x) => `<tr><td>${shortDate(x.date)}</td><td class="n">${dur(x.study_min)}</td><td class="n">${x.new}</td><td class="n">${x.reviews}</td><td class="n">${x.retention != null ? x.retention + "%" : "–"}</td><td class="n">${x.new_per_hr ?? "–"}</td><td class="n">${x.pomodoros || ""}</td></tr>`).join("") +
+    `<details><summary>Table view</summary><table style="margin-top:8px"><tr><th>Day</th><th class="n">Study</th><th class="n">New</th><th class="n">Reviews</th><th class="n">Remembered</th><th class="n">New/hr</th><th class="n">Practice</th><th class="n">Pomodoros</th></tr>` +
+    days.slice().reverse().filter((x) => x.cards || x.practice_n).map((x) => `<tr><td>${shortDate(x.date)}</td><td class="n">${dur(x.study_min)}</td><td class="n">${x.new}</td><td class="n">${x.reviews}</td><td class="n">${x.retention != null ? x.retention + "%" : "–"}</td><td class="n">${x.new_per_hr ?? "–"}</td><td class="n">${x.practice_n ? `${dur(x.practice_min)} · ${x.practice_n} Qs` : ""}</td><td class="n">${x.pomodoros || ""}</td></tr>`).join("") +
     `</table></details>`);
 
   $("#app").innerHTML = h;
