@@ -409,7 +409,7 @@ function render(d) {
   if (d.reading && d.reading.length) {
     h += sec("reading", "Review sheets today", `<table><tr><th>Lecture</th><th class="n">Time</th><th>Sections read</th></tr>` +
       d.reading.map((x) => `<tr><td>${esc(x.title)}</td><td class="n">${dur(x.min)}</td><td>${esc(x.sections || "skimmed")}</td></tr>`).join("") +
-      `</table><div class="sub" style="margin-top:6px">Active reading only: the sheet in front and a scroll or key within the last 3 minutes.</div>`);
+      `</table><div class="sub" style="margin-top:6px">Recorded reading: from Oct 22 it counts only after Record is pressed on the sheet, and pauses itself when the window loses focus or there is no scrolling for 3 minutes.</div>`);
   }
 
   // history
